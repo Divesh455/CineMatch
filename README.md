@@ -16,31 +16,35 @@ It combines Machine Learning **TF-IDF Content-Based Filtering** on local movie d
 
 ---
 
-## 🌐 Netlify Deployment Guide
+## 🚀 Deployment Guide
 
-This project is configured for **Netlify Serverless Deployment** using `mangum` (FastAPI AWS Lambda/Netlify adapter) and `netlify.toml`.
+### Option A: Deploy on Render (Recommended for full Python ML & FastAPI)
 
-### Step-by-Step Netlify Deployment:
+Render provides full Python Web Service support with dedicated RAM and Uvicorn server execution, making it ideal for unpickling Scikit-Learn TF-IDF models and running FastAPI seamlessly.
 
-1. **Push Code to GitHub / GitLab / Bitbucket**:
-   Ensure `netlify.toml`, `netlify/functions/api.py`, `requirements.txt`, `main.py`, and `models/` folder are committed to your repository.
-
-2. **Connect Repository to Netlify**:
-   - Log into [Netlify](https://app.netlify.com/).
-   - Click **Add new site** → **Import an existing project**.
-   - Select your Git repository branch.
-
-3. **Configure Build Settings**:
-   - **Base directory**: `Reccomender UI` (or leave empty if repository root is `Reccomender UI`)
-   - **Build command**: (leave blank)
-   - **Publish directory**: (leave blank)
-
-4. **Add Environment Variables**:
-   In Netlify Site Settings → **Environment variables**:
+1. **Push code to GitHub / GitLab**.
+2. Log into [Render Dashboard](https://dashboard.render.com/).
+3. Click **New +** → **Web Service**.
+4. Select your repository branch.
+5. Configure settings:
+   - **Root Directory**: `Reccomender UI` (or leave blank if repository root)
+   - **Environment**: `Python 3`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+6. Add Environment Variable:
    - `TMDB_API_KEY`: `your_tmdb_api_key_here`
+7. Click **Create Web Service**. Your app will be live on `https://cinematch.onrender.com`!
 
-5. **Deploy Site**:
-   Click **Deploy Site**. Netlify will build the serverless Python function and serve your complete FastAPI app and UI live on `.netlify.app`.
+---
+
+### Option B: Deploy on Netlify (Serverless)
+
+Configured via `netlify.toml` and `mangum` adapter in `netlify/functions/api.py`.
+
+1. Import repository into [Netlify](https://app.netlify.com/).
+2. Set Base Directory: `Reccomender UI`.
+3. Add Environment Variable: `TMDB_API_KEY`.
+4. Deploy site!
 
 ---
 
@@ -50,14 +54,8 @@ The recommendation engine relies on **Content-Based Filtering** using **TF-IDF (
 
 ### 1. Data Cleaning & Feature Engineering
 - Dataset source: `TMDB & IMDB Movies Dataset` containing over 30,000+ movies.
-- Text fields selected for feature extraction:
-  - `title`: Movie name
-  - `overview`: Plot summary
-  - `genres`: Action, Sci-Fi, Drama, etc.
-  - `cast`: Main actors/actresses
-  - `directors`: Film directors
-  - `production_companies`: Studios
-- Text fields are normalized (lowercased, punctuation removed) and concatenated into a unified metadata string per movie.
+- Text fields selected for feature extraction: `title`, `overview`, `genres`, `cast`, `directors`, `production_companies`.
+- Text fields are normalized and concatenated into a unified metadata string per movie.
 
 ### 2. Vectorization & Similarity Matrix Computation
 ```python
@@ -81,13 +79,6 @@ The trained artifacts are serialized using `pickle` into the `models/` directory
 - `tfidf_matrix.pkl`: Precomputed sparse SciPy `csr_matrix` storing TF-IDF vector representations (31,446 movies × 50,000 features).
 - `tfidf.pkl`: Trained `TfidfVectorizer` object.
 
-### 4. Recommendation Inference Logic
-When a user searches for recommendations for a given title:
-1. Lookup the row index $i$ of the query title in `indices.pkl`.
-2. Retrieve vector $v_i = \text{tfidf\_matrix}[i]$.
-3. Compute cosine similarity scores: $S = \text{tfidf\_matrix} \cdot v_i^T$.
-4. Sort scores descending and return the top-N matches (excluding the query movie itself).
-
 ---
 
 ## 📁 Project Structure
@@ -99,13 +90,12 @@ Reccomender UI/
 │   ├── indices.pkl
 │   ├── tfidf_matrix.pkl
 │   └── tfidf.pkl
-├── netlify/
-│   └── functions/
-│       └── api.py              # Netlify Serverless Function Handler
-├── netlify.toml                # Netlify Configuration & Redirects
+├── Procfile                    # Render Web Service Process Command
+├── render.yaml                 # Render Infrastructure-as-Code Configuration
 ├── main.py                     # FastAPI Backend & Embedded Web UI
+├── index.html                  # Single-Page Frontend Application
 ├── .env                        # Environment Variables
-├── requirements.txt            # Python Dependencies (includes mangum)
+├── requirements.txt            # Python Dependencies
 └── README.md                   # Project Documentation
 ```
 

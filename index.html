@@ -196,6 +196,7 @@
   </div>
 
   <script>
+    const API_BASE = window.location.origin.includes('netlify.app') ? '/api' : '';
     let debounceTimer;
 
     document.addEventListener('DOMContentLoaded', () => {
