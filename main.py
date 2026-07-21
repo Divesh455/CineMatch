@@ -671,6 +671,10 @@ INDEX_HTML = """<!DOCTYPE html>
 # =========================
 @app.get("/", response_class=HTMLResponse)
 def index():
+    index_path = os.path.join(BASE_DIR, "index.html")
+    if os.path.exists(index_path):
+        with open(index_path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
     return HTMLResponse(content=INDEX_HTML)
 
 
