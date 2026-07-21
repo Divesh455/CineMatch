@@ -13,4 +13,4 @@ try:
 except Exception as e:
     print(f"Error loading pickles in Netlify serverless function: {e}")
 
-handler = Mangum(app)
+handler = Mangum(app, api_gateway_base_path="/.netlify/functions/api")
