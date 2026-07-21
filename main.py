@@ -217,16 +217,14 @@ def build_title_to_idx_map(indices: Any) -> Dict[str, int]:
         )
 
 
-def get_local_idx_by_title(title: str) -> int:
+def get_local_idx_by_title(title: str) -> Optional[int]:
     global TITLE_TO_IDX
-    if TITLE_TO_IDX is None:
-        raise HTTPException(status_code=500, detail="TF-IDF index map not initialized")
+    if not TITLE_TO_IDX:
+        return None
     key = _norm_title(title)
     if key in TITLE_TO_IDX:
         return int(TITLE_TO_IDX[key])
-    raise HTTPException(
-        status_code=404, detail=f"Title not found in local dataset: '{title}'"
-    )
+    return None
 
 
 def tfidf_recommend_titles(
@@ -234,33 +232,36 @@ def tfidf_recommend_titles(
 ) -> List[Tuple[str, float]]:
     """
     Returns list of (title, score) from local df using cosine similarity on TF-IDF matrix.
-    Safe against missing columns/rows.
+    Safe against missing columns/rows or unpickling failures.
     """
     global df, tfidf_matrix
     if df is None or tfidf_matrix is None:
-        raise HTTPException(status_code=500, detail="TF-IDF resources not loaded")
+        return []
 
     idx = get_local_idx_by_title(query_title)
+    if idx is None:
+        return []
 
-    # query vector
-    qv = tfidf_matrix[idx]
-    scores = (tfidf_matrix @ qv.T).toarray().ravel()
+    try:
+        qv = tfidf_matrix[idx]
+        scores = (tfidf_matrix @ qv.T).toarray().ravel()
+        order = np.argsort(-scores)
 
-    # sort descending
-    order = np.argsort(-scores)
-
-    out: List[Tuple[str, float]] = []
-    for i in order:
-        if int(i) == int(idx):
-            continue
-        try:
-            title_i = str(df.iloc[int(i)]["title"])
-        except Exception:
-            continue
-        out.append((title_i, float(scores[int(i)])))
-        if len(out) >= top_n:
-            break
-    return out
+        out: List[Tuple[str, float]] = []
+        for i in order:
+            if int(i) == int(idx):
+                continue
+            try:
+                title_i = str(df.iloc[int(i)]["title"])
+            except Exception:
+                continue
+            out.append((title_i, float(scores[int(i)])))
+            if len(out) >= top_n:
+                break
+        return out
+    except Exception as e:
+        print(f"TF-IDF recommendation error: {e}")
+        return []
 
 
 async def attach_tmdb_card_by_title(title: str) -> Optional[TMDBMovieCard]:
@@ -290,38 +291,40 @@ async def attach_tmdb_card_by_title(title: str) -> Optional[TMDBMovieCard]:
 def load_pickles():
     global df, indices_obj, tfidf_matrix, tfidf_obj, TITLE_TO_IDX
 
-    # Load df safely (handling DataFrame, bound method to_dict, or raw dict)
-    with open(DF_PATH, "rb") as f:
-        raw_df = pickle.load(f)
-        if isinstance(raw_df, pd.DataFrame):
-            df = raw_df
-        elif hasattr(raw_df, "__self__") and isinstance(raw_df.__self__, pd.DataFrame):
-            df = raw_df.__self__
-        elif callable(raw_df):
-            df = pd.DataFrame(raw_df())
-        elif isinstance(raw_df, dict):
-            df = pd.DataFrame(raw_df)
-        else:
-            df = raw_df
+    try:
+        if not os.path.exists(DF_PATH):
+            print(f"Pickle file not found at {DF_PATH}")
+            return
 
-    # Load indices
-    with open(INDICES_PATH, "rb") as f:
-        indices_obj = pickle.load(f)
+        with open(DF_PATH, "rb") as f:
+            raw_df = pickle.load(f)
+            if isinstance(raw_df, pd.DataFrame):
+                df = raw_df
+            elif hasattr(raw_df, "__self__") and isinstance(raw_df.__self__, pd.DataFrame):
+                df = raw_df.__self__
+            elif callable(raw_df):
+                df = pd.DataFrame(raw_df())
+            elif isinstance(raw_df, dict):
+                df = pd.DataFrame(raw_df)
+            else:
+                df = raw_df
 
-    # Load TF-IDF matrix (usually scipy sparse)
-    with open(TFIDF_MATRIX_PATH, "rb") as f:
-        tfidf_matrix = pickle.load(f)
+        if os.path.exists(INDICES_PATH):
+            with open(INDICES_PATH, "rb") as f:
+                indices_obj = pickle.load(f)
+            TITLE_TO_IDX = build_title_to_idx_map(indices_obj)
 
-    # Load tfidf vectorizer (optional, not used directly here)
-    with open(TFIDF_PATH, "rb") as f:
-        tfidf_obj = pickle.load(f)
+        if os.path.exists(TFIDF_MATRIX_PATH):
+            with open(TFIDF_MATRIX_PATH, "rb") as f:
+                tfidf_matrix = pickle.load(f)
 
-    # Build normalized map
-    TITLE_TO_IDX = build_title_to_idx_map(indices_obj)
+        if os.path.exists(TFIDF_PATH):
+            with open(TFIDF_PATH, "rb") as f:
+                tfidf_obj = pickle.load(f)
 
-    # sanity
-    if df is None or "title" not in df.columns:
-        raise RuntimeError("movie_info.pkl must contain a DataFrame with a 'title' column")
+        print("Successfully loaded model pickles.")
+    except Exception as e:
+        print(f"Warning: Exception while loading pickles: {e}")
 
 
 # =========================
